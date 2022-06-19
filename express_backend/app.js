@@ -1,71 +1,85 @@
-var createError = require('http-errors');
-var express = require('express');
-var path = require('path');
-var cookieParser = require('cookie-parser');
-var logger = require('morgan');
-var cors = require("cors");
+const express = require("express");
+const cookieParser = require("cookie-parser");
+const logger = require("morgan");
+const cors = require("cors");
+const morgan = require("morgan");
+const helmet = require("helmet");
+const createError = require("http-errors");
 
-var usersRouter = require('./api/routes/users');
-var translationRouter = require('./api/routes/Translation')
+const usersRouter = require("./api/routes/user");
+const languagesRouter = require("./api/routes/Languages")
+const translationRouter = require("./api/routes/Translation");
 
-translationRouter.options('*',cors({origin: true, credentials:true}))
+const session = require("express-session");
+const MongoStore = require("connect-mongo");
+require('dotenv').config();
+require('dotenv').config({ path: `./.env.${process.env.NODE_ENV}` })
+
+console.log(`./.env.${process.env.NODE_ENV}`)
+
+//Router configuration
+translationRouter.options("*", cors({ origin: true, credentials: true }));
 
 var app = express();
 
-
-app.use(cors({origin: true, credentials:true}));
-app.use(logger('dev'));
-app.use(express.json());
+app.use(cors({ origin: true, credentials: true }));
 app.use(express.urlencoded({ extended: false }));
+app.use(logger("dev"));
+app.use(morgan("combined"));
+app.use(express.json());
 app.use(cookieParser());
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(helmet());
 
+// middleware to test if authenticated
+function isAuthenticated(req, res, next) {
+  console.log("here")
+  if (req.session.user) next();
+  else {
+    
+    next(createError(401));
+  }
+}
 
+const mongoStoreOptions = {
+  mongoUrl: process.env.MONGO_URI,
+  dbName: process.env.DATABASE_NAME,
+};
 
-// set a an id cookie
+//Create session middleware
+app.use(
+  session({
+    secret: process.env.SECRET,
+    resave: false,
+    saveUninitialized: true,
+    cookie: { secure: false },
+    store: MongoStore.create(mongoStoreOptions),
+  })
+);
+
+//setting metadata headers
 app.use(function (req, res, next) {
-  // check if client sent id cookie
-  var cookie = req.cookies.id;
-  if (cookie === undefined) {
-    // no: set a new id cookie
-    var randomNumber=Math.random().toString();
-    randomNumber=randomNumber.substring(2,randomNumber.length);
-    res.header('Content-Type', 'application/json;charset=UTF-8')
-    res.header('Access-Control-Allow-Credentials', true)
-    res.header(
-      'Access-Control-Allow-Headers',
-      'Origin, X-Requested-With, Content-Type, Accept'
-    )
-    res.cookie('id',randomNumber, { maxAge: 900000, httpOnly: true });
-    console.log('cookie created successfully');
-  } else {
-    // yes, id cookie was already present 
-    console.log('cookie exists', cookie);
-  } 
+  res.header("Content-Type", "application/json;charset=UTF-8");
+  res.header("Access-Control-Allow-Credentials", true);
+  res.header(
+    "Access-Control-Allow-Headers",
+    "Origin, X-Requested-With, Content-Type, Accept"
+  );
+
   next();
 });
 
-
-
-app.use('/users', usersRouter);
-app.use("/translation", translationRouter);
-
-// catch 404 and forward to error handler
-app.use(function(req, res, next) {
-  next(createError(404));
-});
-
-
+app.use("/user", usersRouter);
+app.use("/",languagesRouter);
+app.use("/translation", isAuthenticated, translationRouter);
 
 // error handler
-app.use(function(err, req, res, next) {
+app.use(function (err, req, res, next) {
   // set locals, only providing error in development
   res.locals.message = err.message;
-  res.locals.error = req.app.get('env') === 'development' ? err : {};
+  res.locals.error = req.app.get("env") === "development" ? err : {};
 
   // render the error page
-  res.status(err.status || 500);
-  
+  res.status(err.status || 500).json();
 });
 
 module.exports = app;

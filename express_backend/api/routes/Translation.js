@@ -1,13 +1,9 @@
 const express = require("express");
 const router = express.Router();
-const languageTranslator = require("../services/LanguageTranslator");
-const HistoryStore = require("../services/HistoryStore");
-const SavedStore = require("../services/SavedStore");
+const mongoose = require("mongoose")
+const translator = require("../services/LanguageTranslator");
 const { body, check, validationResult } = require("express-validator");
-
-const hisStore = new HistoryStore();
-const sdStore = new SavedStore();
-
+const Translation = require("../models/Translation");
 
 /* POST translation. */
 router.post(
@@ -15,9 +11,8 @@ router.post(
   body("to").not().isEmpty(),
   body("from").not().isEmpty(),
   body("text").not().isEmpty(),
-  function (req, res) {
+ function (req, res) {
 
-    console.log(req.body)
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array() });
@@ -28,9 +23,7 @@ router.post(
 
     var userId = req.cookies.id;
 
-    console.log(languageTranslator.validateModel(source, target))
-
-    if (languageTranslator.validateModel(source, target) === false) {
+    if (translator.validateModel(source, target) === false) {
       return res.status(400).json({ error: ["Model is not available"] });
     }
 
@@ -40,30 +33,27 @@ router.post(
       target: target,
     };
 
-    languageTranslator
+    translator
       .translate(translateParams)
-      .then((translationResult) => {
+      .then( async(translationResult) => {
         var resultText = translationResult.result.translations[0].translation;
-        var translationId = Math.random().toString();
-        translationId = translationId.substring(2, translationId.length);
+       var toLangObject =  await translator.findLanguage(req.body.to)
+       var fromLangObject =  await translator.findLanguage(req.body.from)
 
-        var translation = {
-          id: userId,
-          translation: {
-            id: translationId,
-            toLang: req.body.to,
-            fromLang: req.body.from,
-            originalText: req.body.text,
-            translatedText: resultText,
-          },
-        };
+       const newTranslation = new Translation({
+        userId: userId,
+        toLanguage : toLangObject,
+        fromLanguage: fromLangObject,
+        originalText:req.body.text,
+        translatedText:resultText,
+        isSaved:false
+      })
 
-        hisStore.add(translation);
-        console.log("Gelelo")
+        newTranslation.save()
+
         res.json({ text: resultText }).send();
       })
       .catch((err) => {
-        console.log("error:", err);
         if (err.status == 404) {
           res.status(404).send("Model is not available");
         }
@@ -71,52 +61,49 @@ router.post(
   }
 );
 
-router.get("/Languages", function (req, res) {
-  languageTranslator
-    .listLanguages()
-    .then((languagesRes) => {
-      var result = languagesRes.result.languages.map((value) => {
-        return {
-          language: value.language,
-          language_name: value.language_name,
-          supported_as_source: value.supported_as_source,
-          supported_as_target: value.supported_as_target,
-        };
-      });
 
-      res.json(result);
-    })
-    .catch((err) => {
-      console.log("error:", err);
-    });
-});
 
-router.get("/history", function (req, res) {
-  var id = req.cookies.id;
-  console.log("id " + id);
-  var result = hisStore.find(function (O) {
-    return O.id === id;
-  });
-  console.log("result " + result);
+router.get("/history", async function (req, res) {
+  var userId = req.cookies.id;
+  var result = await Translation.find({userId:userId});
+
   const translations = result.map(function (value) {
-    return value.translation;
+
+    var pastTranslation={}; 
+
+    pastTranslation.toLang = value.toLanguage
+    pastTranslation.fromLang = value.fromLanguage
+    pastTranslation.id = value._id
+    pastTranslation.originalText = value.originalText
+    pastTranslation.translatedText = value.translatedText
+    pastTranslation.isSaved = value.isSaved
+
+    return pastTranslation;
   });
 
   res.json(translations);
 });
 
-router.get("/saved", function (req, res) {
-  var id = req.cookies.id;
+router.get("/saved", async function (req, res) {
+  console.log("GGG")
+  var userId = req.session.user._id;
 
-  var result = sdStore.find(function (O) {
-    if (O.id === id) {
-      return true;
-    }
-    return false;
-  });
+
+  console.log("userId",userId)
+  var result = await Translation.find({userId:userId,isSaved:true});
 
   const translations = result.map(function (value) {
-    return value.translation;
+
+    var pastTranslation={}; 
+
+    pastTranslation.toLang = value.toLanguage
+    pastTranslation.fromLang = value.fromLanguage
+    pastTranslation.id = value._id
+    pastTranslation.originalText = value.originalText
+    pastTranslation.translatedText = value.translatedText
+    pastTranslation.isSaved = value.isSaved
+
+    return pastTranslation;
   });
 
   res.status(200).json(translations);
@@ -125,41 +112,38 @@ router.get("/saved", function (req, res) {
 router.delete(
   "/saved",
   body("translationId").not().isEmpty(),
-  function (req, res) {
-    var id = req.cookies.id;
+  async function (req, res) {
 
-    const deleteCallback = (value) => {
-      return value.translation.id == req.body.translationId;
-    };
+    var result = await Translation.findById(req.body.translationId)
+    if (result === undefined) {
+      return res.status(404).json({ status: "translation not found" });
+    }
 
-    sdStore.delete(deleteCallback);
+    result.isSaved = false
 
+    result.save()
     res.status(200).json({ status: "success" });
   }
 );
 
 router.post(
   "/saved",
-  check("cookies.id"),
   body("translationId").not().isEmpty(),
-  function (req, res) {
+  async function (req, res) {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array() });
     }
+    const  id = mongoose.Types.ObjectId(req.body.translationId);
+    var translation = await Translation.findById(id)
 
-    var id = req.cookies.id;
-
-    var translationInfo = hisStore.find(
-      (value) => value.translation.id == req.body.translationId
-    );
-
-    console.log(translationInfo.length);
-    if (translationInfo === undefined || translationInfo.length === 0) {
+    if (translation === null || translation.length === 0) {
       return res.status(404).json({ status: "translation not found" });
     }
 
-    sdStore.add(translationInfo[0]);
+    translation.isSaved = true
+
+    translation.save()
 
     res.status(200).json({ status: "success" });
   }

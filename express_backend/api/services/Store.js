@@ -1,3 +1,6 @@
+/*
+InMemory data store
+*/
 var Store = function () {
   
   this.values = []
@@ -5,9 +8,13 @@ var Store = function () {
 };
 
 Store.prototype.add = function (value) {
-  if (value !== undefined) {
-    this.values.push(value);
+
+  for (var i = 0; i < arguments.length; i++) {
+    if(arguments[i] !== undefined && arguments[i]!== null){
+      this.values.push(arguments[i]);
+    }
   }
+
 }
 
 Store.prototype.find =  function (filterFunc) {
@@ -16,18 +23,22 @@ Store.prototype.find =  function (filterFunc) {
   return result;
 }
 
-Store.prototype.get =  function () {
-  return this.values;
+Store.prototype.getAll =  function () {
+  return Array.from(this.values);
 }
 
-Store.prototype.delete =  function (deleteCallback) {
-  var index = values.findIndex((value) => {
-    return deleteCallback(value);
+
+
+Store.prototype.delete =  function (filterFunc) {
+  var index = this.values.findIndex((value) => {
+    return filterFunc(value);
   });
 
-  if (index !== -1) {
-    this.values.splice(index, 1);
+  if (index === -1) {
+   return
   }
+
+  this.values.splice(index, 1);
 }
 
 
