@@ -1,15 +1,13 @@
 const User = require("../../api/models/User")
-const generateUser = (username="test",email="test@gmail.com",password="test",salt="test") =>{
+const generateSampleUser = () =>{
 
     
     var newUser = new User({
-        username: username,
-        email: email,
-        password: password,
-        salt: salt,
+        username: "test",
+        email: "test@gmail.com",
+        password: "test",
+        salt: "test",
       });
   
-      return newUser
+      newUser.save();
 }
-
-module.exports = generateUser

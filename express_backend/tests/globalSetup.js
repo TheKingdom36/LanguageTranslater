@@ -1,6 +1,6 @@
 const { MongoMemoryServer } = require("mongodb-memory-server");
 const mongoose = require("mongoose");
-const config = require("./config");
+const  config  = require("./config");
 
 const globalSetup = async () => {
   if (config.Memory) {
@@ -10,9 +10,7 @@ const globalSetup = async () => {
     const uri = instance.getUri();
     global.__MONGOINSTANCE = instance;
     process.env.MONGO_URI = uri.slice(0, uri.lastIndexOf("/"));
-
-    require("dotenv").config();
-    require("dotenv").config({ path: `./.env.${process.env.NODE_ENV}` });
+    
   } else {
     process.env.MONGO_URI = `mongodb://${config.IP}:${config.Port}`;
   }
@@ -23,4 +21,4 @@ const globalSetup = async () => {
   await mongoose.disconnect();
 };
 
-module.exports = globalSetup;
+module.exports = globalSetup

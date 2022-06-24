@@ -1,14 +1,9 @@
-/**
- * Mock Language Translator provides mock support for translating between english and french
- * if other responses are required will need to manually mock the fucntions before running an individual test
- */
 var mockLanguageTranslator = jest.createMockFromModule("../LanguageTranslator");
 
 mockLanguageTranslator.validateModel = function (from, to) {
   var models = [
-    { source: "en", target: "fr" },
-    { source: "fr", target: "en" },
     { source: "en", target: "en" },
+    { source: "en", target: "fr" },
   ];
 
   for (mod in models) {
@@ -24,24 +19,27 @@ mockLanguageTranslator.translate = jest
   .mockResolvedValue({ result: { translations: [{ translation: "Hello" }] } });
 
 mockLanguageTranslator.listLanguages = jest.fn().mockResolvedValue({
-  result: {
-    languages: [
+  result:{
+
+
+    languages:[
       {
-        language: "en",
-        language_name: "English",
+        language: "af",
+        language_name: "Afrikaans",
+        supported_as_source: false,
+        supported_as_target: false,
+      },
+      {
+        language: "ar",
+        language_name: "Arabic",
         supported_as_source: true,
         supported_as_target: true,
       },
-      {
-        language: "fr",
-        language_name: "French",
-        supported_as_source: true,
-        supported_as_target: true,
-      },
-    ],
-  },
-});
+    ]
+  
 
 
+
+   }});
 
 module.exports = mockLanguageTranslator;

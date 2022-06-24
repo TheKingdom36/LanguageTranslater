@@ -1,13 +1,9 @@
 const express = require("express");
-const mongoose = require("mongoose");
 const router = express.Router();
-const { body, validationResult } = require("express-validator");
+const mongoose = require("mongoose")
 const translator = require("../services/LanguageTranslator");
+const { body, check, validationResult } = require("express-validator");
 const Translation = require("../models/Translation");
-const {
-  MODEL_NOT_AVAILABLE,
-  TRANSLATION_NOT_FOUND,
-} = require("../utils/ErrorMessages");
 
 /* POST translation. */
 router.post(
@@ -15,7 +11,8 @@ router.post(
   body("to").not().isEmpty(),
   body("from").not().isEmpty(),
   body("text").not().isEmpty(),
-  function (req, res) {
+ function (req, res) {
+
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array() });
@@ -23,10 +20,11 @@ router.post(
 
     var target = req.body.to;
     var source = req.body.from;
-    var userId = req.session.user;
+
+    var userId = req.cookies.id;
 
     if (translator.validateModel(source, target) === false) {
-      return res.status(404).json({ error: MODEL_NOT_AVAILABLE });
+      return res.status(400).json({ error: ["Model is not available"] });
     }
 
     const translateParams = {
@@ -37,46 +35,48 @@ router.post(
 
     translator
       .translate(translateParams)
-      .then(async (translationResult) => {
+      .then( async(translationResult) => {
         var resultText = translationResult.result.translations[0].translation;
-        var toLangObject = await translator.findLanguage(req.body.to);
-        var fromLangObject = await translator.findLanguage(req.body.from);
+       var toLangObject =  await translator.findLanguage(req.body.to)
+       var fromLangObject =  await translator.findLanguage(req.body.from)
 
-        const newTranslation = new Translation({
-          userId: userId,
-          toLanguage: toLangObject,
-          fromLanguage: fromLangObject,
-          originalText: req.body.text,
-          translatedText: resultText,
-          isSaved: false,
-        });
+       const newTranslation = new Translation({
+        userId: userId,
+        toLanguage : toLangObject,
+        fromLanguage: fromLangObject,
+        originalText:req.body.text,
+        translatedText:resultText,
+        isSaved:false
+      })
 
-        newTranslation.save();
+        newTranslation.save()
 
         res.json({ text: resultText }).send();
       })
       .catch((err) => {
         if (err.status == 404) {
-          res.status(404).send({ error: MODEL_NOT_AVAILABLE });
+          res.status(404).send("Model is not available");
         }
       });
   }
 );
 
+
+
 router.get("/history", async function (req, res) {
-  var userId = req.session.user;
-  var result = await Translation.find({ userId: userId });
-  
+  var userId = req.cookies.id;
+  var result = await Translation.find({userId:userId});
 
   const translations = result.map(function (value) {
-    var pastTranslation = {};
 
-    pastTranslation.toLang = value.toLanguage;
-    pastTranslation.fromLang = value.fromLanguage;
-    pastTranslation.id = value._id;
-    pastTranslation.originalText = value.originalText;
-    pastTranslation.translatedText = value.translatedText;
-    pastTranslation.isSaved = value.isSaved;
+    var pastTranslation={}; 
+
+    pastTranslation.toLang = value.toLanguage
+    pastTranslation.fromLang = value.fromLanguage
+    pastTranslation.id = value._id
+    pastTranslation.originalText = value.originalText
+    pastTranslation.translatedText = value.translatedText
+    pastTranslation.isSaved = value.isSaved
 
     return pastTranslation;
   });
@@ -85,19 +85,23 @@ router.get("/history", async function (req, res) {
 });
 
 router.get("/saved", async function (req, res) {
-  var userId = req.session.user;
+  console.log("GGG")
+  var userId = req.session.user._id;
 
-  var result = await Translation.find({ userId: userId, isSaved: true });
+
+  console.log("userId",userId)
+  var result = await Translation.find({userId:userId,isSaved:true});
 
   const translations = result.map(function (value) {
-    var pastTranslation = {};
 
-    pastTranslation.toLang = value.toLanguage;
-    pastTranslation.fromLang = value.fromLanguage;
-    pastTranslation.id = value._id;
-    pastTranslation.originalText = value.originalText;
-    pastTranslation.translatedText = value.translatedText;
-    pastTranslation.isSaved = value.isSaved;
+    var pastTranslation={}; 
+
+    pastTranslation.toLang = value.toLanguage
+    pastTranslation.fromLang = value.fromLanguage
+    pastTranslation.id = value._id
+    pastTranslation.originalText = value.originalText
+    pastTranslation.translatedText = value.translatedText
+    pastTranslation.isSaved = value.isSaved
 
     return pastTranslation;
   });
@@ -109,19 +113,15 @@ router.delete(
   "/saved",
   body("translationId").not().isEmpty(),
   async function (req, res) {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
+
+    var result = await Translation.findById(req.body.translationId)
+    if (result === undefined) {
+      return res.status(404).json({ status: "translation not found" });
     }
 
-    var result = await Translation.findById(req.body.translationId);
-    if (result ===null) {
-      return res.status(404).json({ error: TRANSLATION_NOT_FOUND });
-    }
+    result.isSaved = false
 
-    result.isSaved = false;
-
-    result.save();
+    result.save()
     res.status(200).json({ status: "success" });
   }
 );
@@ -134,19 +134,21 @@ router.post(
     if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array() });
     }
-    const id = mongoose.Types.ObjectId(req.body.translationId);
-    var translation = await Translation.findById(id);
+    const  id = mongoose.Types.ObjectId(req.body.translationId);
+    var translation = await Translation.findById(id)
 
     if (translation === null || translation.length === 0) {
-      return res.status(404).json({ status: TRANSLATION_NOT_FOUND });
+      return res.status(404).json({ status: "translation not found" });
     }
 
-    translation.isSaved = true;
+    translation.isSaved = true
 
-    translation.save();
+    translation.save()
 
     res.status(200).json({ status: "success" });
   }
 );
+
+
 
 module.exports = router;
