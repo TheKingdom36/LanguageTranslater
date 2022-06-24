@@ -32,7 +32,6 @@ app.use(helmet());
 
 // middleware to test if authenticated
 function isAuthenticated(req, res, next) {
-  console.log("here")
   if (req.session.user) next();
   else {
     
