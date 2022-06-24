@@ -3,6 +3,7 @@ const bcrypt = require("bcrypt");
 const router = express.Router();
 const User = require("../models/User");
 const { body, validationResult } = require("express-validator");
+const { USER_NOT_FOUND,INCORRECT_PASSWORD } = require("../utils/ErrorMessages");
 
 router.post(
   "/",
@@ -12,9 +13,8 @@ router.post(
     .notEmpty()
     .custom((value) => {
       return User.findOne({ email: value }).then((user) => {
-    
         if (user !== null) {
-          return Promise.reject("E-mail already in use");
+          return Promise.reject(EMAIL_IN_USE);
         }
       });
     }),
@@ -22,11 +22,12 @@ router.post(
   async function (req, res) {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({ status:"failed",errors: errors.array() });
+      return res.status(400).json({ status: "failed", errors: errors.array() });
     }
 
     const salt = await bcrypt.genSalt(10);
 
+    
     var hashedPassword = await bcrypt.hash(req.body.password, salt);
 
     var newUser = new User({
@@ -48,17 +49,22 @@ router.post(
   body("email").isEmail().notEmpty(),
   body("password").notEmpty(),
   async function (req, res, next) {
+
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({ status:"failed",errors: errors.array() });
+      return res.status(400).json({ status: "failed", errors: errors.array() });
     }
 
     const user = await User.findOne({ email: req.body.email });
+
+    if (user === null) {
+      return res.status("404").json({ status: USER_NOT_FOUND });
+    }
+
     const hashedPassword = await bcrypt.hash(req.body.password, user.salt);
 
-
     if (hashedPassword !== user.password) {
-      res.status(401).json({ status: "Provided password is incorrect" });
+      return res.status(401).json({ status: INCORRECT_PASSWORD });
     }
 
     // regenerate the session, which is good practice to help
@@ -66,13 +72,9 @@ router.post(
     req.session.regenerate(function (err) {
       if (err) next(err);
 
-      // store user information in session, typically a user id
+      // store userid in session
       req.session.user = user.id;
 
-     
-
-      // save the session before redirection to ensure page
-      // load does not happen before session is saved
       req.session.save(function (err) {
         if (err) return next(err);
         res.status(200).json({ status: "success" });
@@ -82,7 +84,6 @@ router.post(
 );
 
 router.get("/logout", function (req, res, next) {
-  // logout logic
 
   // clear the user from the session object and save.
   // this will ensure that re-using the old session id
@@ -104,9 +105,8 @@ router.get("/", async function (req, res) {
   const user = await User.findOne({ _id: req.session.user });
 
   if (user === null || user === undefined) {
-    res.status(404).json({ status: "user not found" });
+    res.status(404).json({ status: USER_NOT_FOUND });
   } else {
-    console.log(user)
     const userResponseInfo = {
       username: user.username,
     };
